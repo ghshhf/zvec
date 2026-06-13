@@ -1,4 +1,7 @@
-cmake_minimum_required(VERSION 3.13)
+# Zvec bundles Apache Arrow 21.0.0, which requires CMake >= 3.26 to build its
+# bundled Apache Thrift dependency. Set this here so users get a clear error
+# upfront instead of failing after a long build (Issue #468).
+cmake_minimum_required(VERSION 3.26)
 cmake_policy(SET CMP0077 NEW)
 project(zvec)
 set(CC_CXX_STANDARD 17)

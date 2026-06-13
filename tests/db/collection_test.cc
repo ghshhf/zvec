@@ -6050,3 +6050,145 @@ TEST_F(CollectionTest, Feature_CreateOrDropFtsIndex) {
     FileHelper::RemoveDirectory(col_path);
   }
 }
+
+// Drop a scalar index and then recreate it on the same field.
+// Before the fix, recreate failed because the old RocksDB column family was
+// not cleaned up during DropIndex. (Issue #427)
+TEST_F(CollectionTest, Feature_DropAndRecreateScalarIndex) {
+  auto func = [&](const std::string &field_name, bool enable_optimize) {
+    FileHelper::RemoveDirectory(col_path);
+
+    auto schema =
+        TestHelper::CreateSchemaWithScalarIndex(false, enable_optimize);
+    auto options = CollectionOptions{false, true, 64 * 1024 * 1024};
+    int doc_count = 1000;
+
+    auto collection = TestHelper::CreateCollectionWithDoc(
+        col_path, *schema, options, 0, doc_count, false);
+    ASSERT_NE(collection, nullptr);
+
+    // Verify index exists and queries work
+    auto stats = collection->Stats().value();
+    ASSERT_EQ(stats.doc_count, doc_count);
+    ASSERT_FLOAT_EQ(stats.index_completeness[field_name], 1.0f);
+
+    // Drop the scalar index
+    auto s = collection->DropIndex(field_name);
+    ASSERT_TRUE(s.ok()) << s.message();
+
+    stats = collection->Stats().value();
+    ASSERT_EQ(stats.doc_count, doc_count);
+    // index_completeness should be 0 after drop
+    ASSERT_FLOAT_EQ(stats.index_completeness[field_name], 0.0f);
+
+    // Recreate the scalar index - this was failing before the fix
+    auto index_params = std::make_shared<InvertIndexParams>(enable_optimize);
+    s = collection->CreateIndex(field_name, index_params);
+    ASSERT_TRUE(s.ok()) << "Recreate index failed: " << s.message();
+
+    // Flush to persist
+    s = collection->Flush();
+    ASSERT_TRUE(s.ok()) << s.message();
+
+    // Verify index is recreated
+    stats = collection->Stats().value();
+    ASSERT_EQ(stats.doc_count, doc_count);
+    ASSERT_FLOAT_EQ(stats.index_completeness[field_name], 1.0f);
+
+    // Reopen and verify persistence
+    collection.reset();
+    auto result = Collection::Open(col_path, options);
+    ASSERT_TRUE(result.has_value()) << result.error().message();
+    collection = result.value();
+
+    stats = collection->Stats().value();
+    ASSERT_EQ(stats.doc_count, doc_count);
+    ASSERT_FLOAT_EQ(stats.index_completeness[field_name], 1.0f);
+
+    collection.reset();
+    FileHelper::RemoveDirectory(col_path);
+  };
+
+  // Test with different scalar fields
+  func("int32", false);
+  func("int32", true);
+  func("uint32", false);
+  func("bool", false);
+  func("float", false);
+  func("double", false);
+  func("int64", false);
+  func("uint64", false);
+  func("string", false);
+  func("string", true);
+}
+
+// Drop scalar indexes on multiple fields and then recreate them.
+// Before the fix, recreate failed because the old RocksDB column families were
+// not cleaned up during DropIndex. (Issue #427)
+TEST_F(CollectionTest, Feature_DropAndRecreateScalarIndex_MultipleFields) {
+  auto func = [&](bool enable_optimize) {
+    FileHelper::RemoveDirectory(col_path);
+
+    auto schema =
+        TestHelper::CreateSchemaWithScalarIndex(false, enable_optimize);
+    auto options = CollectionOptions{false, true, 64 * 1024 * 1024};
+    int doc_count = 1000;
+
+    auto collection = TestHelper::CreateCollectionWithDoc(
+        col_path, *schema, options, 0, doc_count, false);
+    ASSERT_NE(collection, nullptr);
+
+    // Verify indexes exist
+    auto stats = collection->Stats().value();
+    ASSERT_EQ(stats.doc_count, doc_count);
+
+    // Fields with scalar indexes in CreateSchemaWithScalarIndex
+    std::vector<std::string> scalar_fields = {
+        "int32", "string", "uint32", "bool",
+        "float", "double", "int64", "uint64"};
+
+    // Drop all scalar indexes
+    for (const auto &field_name : scalar_fields) {
+      auto s = collection->DropIndex(field_name);
+      ASSERT_TRUE(s.ok()) << "Drop index failed for " << field_name << ": "
+                          << s.message();
+    }
+
+    // Recreate all scalar indexes
+    for (const auto &field_name : scalar_fields) {
+      auto index_params = std::make_shared<InvertIndexParams>(enable_optimize);
+      auto s = collection->CreateIndex(field_name, index_params);
+      ASSERT_TRUE(s.ok()) << "Recreate index failed for " << field_name << ": "
+                          << s.message();
+    }
+
+    // Flush to persist
+    auto s = collection->Flush();
+    ASSERT_TRUE(s.ok()) << s.message();
+
+    // Verify all indexes are recreated
+    stats = collection->Stats().value();
+    ASSERT_EQ(stats.doc_count, doc_count);
+    for (const auto &field_name : scalar_fields) {
+      ASSERT_FLOAT_EQ(stats.index_completeness[field_name], 1.0f);
+    }
+
+    // Reopen and verify persistence
+    collection.reset();
+    auto result = Collection::Open(col_path, options);
+    ASSERT_TRUE(result.has_value()) << result.error().message();
+    collection = result.value();
+
+    stats = collection->Stats().value();
+    ASSERT_EQ(stats.doc_count, doc_count);
+    for (const auto &field_name : scalar_fields) {
+      ASSERT_FLOAT_EQ(stats.index_completeness[field_name], 1.0f);
+    }
+
+    collection.reset();
+    FileHelper::RemoveDirectory(col_path);
+  };
+
+  func(false);
+  func(true);
+}
