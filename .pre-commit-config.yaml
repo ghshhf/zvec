@@ -44,6 +44,22 @@ repos:
 
   - repo: local
     hooks:
+      - id: clang-tidy
+        name: clang-tidy (C++ static analysis)
+        entry: bash -c '
+          REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".");
+          if [ -f "$REPO_ROOT/compile_commands.json" ]; then
+            cd "$REPO_ROOT" && clang-tidy --quiet "$@" 2>&1;
+          else
+            echo "Skipping clang-tidy: compile_commands.json not found.";
+            echo "To generate it, run: cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -B build";
+          fi
+        '
+        language: system
+        types_or: [c++, c]
+        exclude: ^thirdparty/.*$
+        require_serial: true
+
       - id: branch-name-check
         name: Check branch name format
         entry: >-
