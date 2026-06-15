@@ -40,11 +40,11 @@ constexpr uint32_t MAX_ARRAY_FIELD_LEN = 32;
 
 const float COMPACT_DELETE_RATIO_THRESHOLD = 0.3f;
 
-const std::regex COLLECTION_NAME_REGEX("^[a-zA-Z0-9_-]{3,64}$");
+const std::regex COLLECTION_NAME_REGEX("^[a-zA-Z0-9_.-]{1,128}$");
 
-const std::regex FIELD_NAME_REGEX("^[a-zA-Z0-9_-]{1,32}$");
+const std::regex FIELD_NAME_REGEX("^[a-zA-Z0-9_.-]{1,64}$");
 
-const std::regex DOC_PK_REGEX("^[a-zA-Z0-9_!@#$%+=.-]{1,64}$");
+const std::regex DOC_PK_REGEX("^[a-zA-Z0-9_!@#$%+=.,:;~/-]{1,256}$");
 
 constexpr uint32_t kMaxDenseDimSize = 20000;
 
