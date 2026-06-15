@@ -131,6 +131,23 @@ func (c *Collection) Close() error {
 	return nil
 }
 
+// DestroyCollection destroys a collection (deletes all data on disk).
+func DestroyCollection(path string) error {
+	pathStr := C.CString(path)
+	defer C.free(unsafe.Pointer(pathStr))
+
+	code := C.zvec_collection_destroy(pathStr)
+	if code != C.ZVEC_OK {
+		return fmt.Errorf("failed to destroy collection: %s", GetLastError())
+	}
+	return nil
+}
+
+// DropCollection drops a collection (alias for DestroyCollection).
+func DropCollection(path string) error {
+	return DestroyCollection(path)
+}
+
 // CreateSchema creates a new collection schema with the given name.
 func CreateSchema(name string) (*Schema, error) {
 	nameStr := C.CString(name)
@@ -186,19 +203,53 @@ func (o *Options) SetEnableMMap(enable bool) error {
 	return nil
 }
 
-// DestroyCollection destroys a collection (deletes all data on disk).
-func DestroyCollection(path string) error {
-	pathStr := C.CString(path)
-	defer C.free(unsafe.Pointer(pathStr))
-
-	code := C.zvec_collection_destroy(pathStr)
+// SetReadOnly sets whether the collection is read-only.
+func (o *Options) SetReadOnly(readOnly bool) error {
+	code := C.zvec_collection_options_set_read_only(o.handle, C.bool(readOnly))
 	if code != C.ZVEC_OK {
-		return fmt.Errorf("failed to destroy collection: %s", GetLastError())
+		return fmt.Errorf("failed to set read_only: %s", GetLastError())
 	}
 	return nil
 }
 
-// DropCollection drops a collection (alias for DestroyCollection).
-func DropCollection(path string) error {
-	return DestroyCollection(path)
+// SetMaxBufferSize sets the maximum buffer size.
+func (o *Options) SetMaxBufferSize(size uint64) error {
+	code := C.zvec_collection_options_set_max_buffer_size(o.handle, C.uint64_t(size))
+	if code != C.ZVEC_OK {
+		return fmt.Errorf("failed to set max_buffer_size: %s", GetLastError())
+	}
+	return nil
+}
+
+// GetSchema returns the schema of a collection.
+func (c *Collection) GetSchema() (*Schema, error) {
+	var schema *C.zvec_collection_schema_t
+	code := C.zvec_collection_get_schema(c.handle, &schema)
+	if code != C.ZVEC_OK {
+		return nil, fmt.Errorf("failed to get schema: %s", GetLastError())
+	}
+	return &Schema{handle: schema}, nil
+}
+
+// GetOptions returns the options of a collection.
+func (c *Collection) GetOptions() (*Options, error) {
+	var opts *C.zvec_collection_options_t
+	code := C.zvec_collection_get_options(c.handle, &opts)
+	if code != C.ZVEC_OK {
+		return nil, fmt.Errorf("failed to get options: %s", GetLastError())
+	}
+	return &Options{handle: opts}, nil
+}
+
+// GetStats returns the statistics of a collection.
+func (c *Collection) GetStats() (map[string]interface{}, error) {
+	var stats *C.zvec_collection_stats_t
+	code := C.zvec_collection_get_stats(c.handle, &stats)
+	if code != C.ZVEC_OK {
+		return nil, fmt.Errorf("failed to get stats: %s", GetLastError())
+	}
+
+	// TODO: Extract stats into a Go map
+	// This requires understanding the full stats structure
+	return nil, fmt.Errorf("GetStats not fully implemented yet")
 }
