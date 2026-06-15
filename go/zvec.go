@@ -92,16 +92,41 @@ func CreateCollection(path string, schema *Schema, opts *Options) (*Collection, 
 
 // OpenCollection opens an existing collection.
 func OpenCollection(path string, readOnly bool) (*Collection, error) {
-	// TODO: Implement using C API - need to check the exact C function name
-	return nil, fmt.Errorf("not implemented yet")
+	var coll *C.zvec_collection_t
+	pathStr := C.CString(path)
+	defer C.free(unsafe.Pointer(pathStr))
+
+	// Create default options
+	opts := C.zvec_collection_options_create()
+	if opts == nil {
+		return nil, fmt.Errorf("failed to create options")
+	}
+	defer C.zvec_collection_options_destroy(opts)
+
+	// Set read-only mode
+	if readOnly {
+		C.zvec_collection_options_set_read_only(opts, C.bool(true))
+	}
+
+	code := C.zvec_collection_open(pathStr, opts, &coll)
+	if code != C.ZVEC_OK {
+		return nil, fmt.Errorf("failed to open collection: %s", GetLastError())
+	}
+
+	return &Collection{handle: coll, path: path}, nil
 }
 
-// Close closes the collection.
+// Close closes the collection and releases resources.
 func (c *Collection) Close() error {
 	if c.handle == nil {
 		return nil
 	}
-	// TODO: Implement using C API
+
+	code := C.zvec_collection_close(c.handle)
+	if code != C.ZVEC_OK {
+		return fmt.Errorf("failed to close collection: %s", GetLastError())
+	}
+
 	c.handle = nil
 	return nil
 }
@@ -159,4 +184,21 @@ func (o *Options) SetEnableMMap(enable bool) error {
 		return fmt.Errorf("failed to set enable_mmap: %s", GetLastError())
 	}
 	return nil
+}
+
+// DestroyCollection destroys a collection (deletes all data on disk).
+func DestroyCollection(path string) error {
+	pathStr := C.CString(path)
+	defer C.free(unsafe.Pointer(pathStr))
+
+	code := C.zvec_collection_destroy(pathStr)
+	if code != C.ZVEC_OK {
+		return fmt.Errorf("failed to destroy collection: %s", GetLastError())
+	}
+	return nil
+}
+
+// DropCollection drops a collection (alias for DestroyCollection).
+func DropCollection(path string) error {
+	return DestroyCollection(path)
 }
