@@ -19,6 +19,16 @@ func Version() string {
 	return C.GoString(C.zvec_version())
 }
 
+// GetLastError returns the last error message.
+func GetLastError() string {
+	var errMsg *C.char
+	C.zvec_get_last_error(&errMsg)
+	if errMsg == nil {
+		return ""
+	}
+	return C.GoString(errMsg)
+}
+
 // NewDB creates a new zvec database instance.
 func NewDB(config *Config) (*DB, error) {
 	// TODO: Implement based on C API
